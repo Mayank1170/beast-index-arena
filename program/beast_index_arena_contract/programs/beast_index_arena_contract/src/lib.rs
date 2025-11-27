@@ -17,15 +17,11 @@ pub mod beast_index_arena_contract {
         battle.battle_id = battle_id;
         battle.authourity = ctx.accounts.authourity.key();
 
-        battle.creature_a_hp = hp;
-        battle.creature_a_atk = atk;
-        battle.creature_a_def = def;
-        battle.creature_a_max_hp = hp;
-
-        battle.creature_b_hp = hp;
-        battle.creature_b_atk = atk;
-        battle.creature_b_def = def;
-        battle.creature_b_max_hp = hp;
+        battle.creature_hp = [hp, hp, hp, hp];
+        battle.creature_atk = [atk, atk, atk, atk];
+        battle.creature_def = [def, def, def, def];
+        battle.creature_max_hp = [hp, hp, hp, hp];
+        battle.is_alive = [true, true, true, true];
 
         battle.is_battle_over = false;
         battle.winner = None;
@@ -40,42 +36,59 @@ pub mod beast_index_arena_contract {
 
         require!(!battle.is_battle_over, GameError::BattleAlreadyOver);
 
-        let damage_a_to_b = battle
-            .creature_a_atk
-            .saturating_sub(battle.creature_b_def)
-            .max(1);
+        let alive_count = battle.is_alive.iter().filter(|&&x| x).count();
 
-        let damage_b_to_a = battle
-            .creature_b_atk
-            .saturating_sub(battle.creature_a_def)
-            .max(1);
+        for attacker_idx in 0..4 {
+            if !battle.is_alive[attacker_idx] {
+                continue;
+            }
+            let target_idx = (attacker_idx + 1) % 4;
+            let mut actual_target_idx = target_idx;
+            let mut searched = 0;
+            while !battle.is_alive[actual_target_idx] && searched < 4 {
+                actual_target_idx = (actual_target_idx + 1) % 4;
+                searched += 1;
+            }
+            if !battle.is_alive[actual_target_idx] || actual_target_idx == attacker_idx {
+                continue;
+            }
 
-        battle.creature_b_hp = battle.creature_b_hp.saturating_sub(damage_a_to_b);
-        msg!(
-            "Creature A attacks B for {} damage! B HP: {}",
-            damage_a_to_b,
-            battle.creature_b_hp
-        );
+            let damage = battle.creature_atk[attacker_idx]
+                .saturating_sub(battle.creature_def[actual_target_idx])
+                .max(1);
 
-        if battle.creature_b_hp > 0 {
-            battle.creature_a_hp = battle.creature_a_hp.saturating_sub(damage_b_to_a);
+            battle.creature_hp[actual_target_idx] =
+                battle.creature_hp[actual_target_idx].saturating_sub(damage);
+
             msg!(
-                "Creature B attacks A for {} damage! A HP: {}",
-                damage_b_to_a,
-                battle.creature_a_hp
+                "Creature {} attacks Creature {} for {} damage! HP: {}",
+                attacker_idx,
+                actual_target_idx,
+                damage,
+                battle.creature_hp[actual_target_idx]
             );
-        } else {
-            msg!("Creature B died before counter-attacking!");
-        }
 
-        if battle.creature_b_hp == 0 {
+            if (battle.creature_hp[actual_target_idx] == 0) {
+                battle.is_alive[actual_target_idx] = false;
+                msg!("Creature {} died!", actual_target_idx);
+            }
+        }
+        let alive_creatures: Vec<usize> = battle
+            .is_alive
+            .iter()
+            .enumerate()
+            .filter(|(_, &alive)| alive)
+            .map(|(idx, _)| idx)
+            .collect();
+
+        if alive_creatures.len() == 1 {
             battle.is_battle_over = true;
-            battle.winner = Some(0);
-            msg!("Creature A WINS!");
-        } else if battle.creature_a_hp == 0 {
+            battle.winner = Some(alive_creatures[0] as u8);
+            msg!("🏆 Creature {} WINS!", alive_creatures[0]);
+        } else if alive_creatures.len() == 0 {
             battle.is_battle_over = true;
-            battle.winner = Some(1);
-            msg!("Creature B WINS!");
+            battle.winner = None;
+            msg!("⚖️  All creatures died! It's a draw!");
         }
 
         battle.current_turn += 1;
@@ -117,15 +130,11 @@ pub struct BattleState {
     pub battle_id: u64,
     pub authourity: Pubkey,
 
-    pub creature_a_hp: u16,
-    pub creature_a_max_hp: u16,
-    pub creature_a_atk: u16,
-    pub creature_a_def: u16,
-
-    pub creature_b_hp: u16,
-    pub creature_b_max_hp: u16,
-    pub creature_b_atk: u16,
-    pub creature_b_def: u16,
+    pub creature_hp: [u16; 4],
+    pub creature_max_hp: [u16; 4],
+    pub creature_atk: [u16; 4],
+    pub creature_def: [u16; 4],
+    pub is_alive: [bool; 4],
 
     pub is_battle_over: bool,
     pub winner: Option<u8>,
@@ -135,7 +144,8 @@ pub struct BattleState {
 }
 
 impl BattleState {
-    pub const LEN: usize = 8 + 8 + 32 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 1 + 8 + 1 + 100;
+    pub const LEN: usize =
+        8 + 32 + (2 * 4) + (2 * 4) + (2 * 4) + (2 * 4) + 1 * 4 + 1 + 1 + 1 + 8 + 1 + 100;
 }
 
 #[error_code]
