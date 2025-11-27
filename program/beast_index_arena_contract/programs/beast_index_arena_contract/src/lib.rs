@@ -34,6 +34,54 @@ pub mod beast_index_arena_contract {
 
         Ok(())
     }
+
+    pub fn execute_turn(ctx: Context<ExecuteTurn>) -> Result<()> {
+        let battle = &mut ctx.accounts.battle_state;
+
+        require!(!battle.is_battle_over, GameError::BattleAlreadyOver);
+
+        let damage_a_to_b = battle
+            .creature_a_atk
+            .saturating_sub(battle.creature_b_def)
+            .max(1);
+
+        let damage_b_to_a = battle
+            .creature_b_atk
+            .saturating_sub(battle.creature_a_def)
+            .max(1);
+
+        battle.creature_b_hp = battle.creature_b_hp.saturating_sub(damage_a_to_b);
+        msg!(
+            "Creature A attacks B for {} damage! B HP: {}",
+            damage_a_to_b,
+            battle.creature_b_hp
+        );
+
+        if battle.creature_b_hp > 0 {
+            battle.creature_a_hp = battle.creature_a_hp.saturating_sub(damage_b_to_a);
+            msg!(
+                "Creature B attacks A for {} damage! A HP: {}",
+                damage_b_to_a,
+                battle.creature_a_hp
+            );
+        } else {
+            msg!("Creature B died before counter-attacking!");
+        }
+
+        if battle.creature_b_hp == 0 {
+            battle.is_battle_over = true;
+            battle.winner = Some(0);
+            msg!("Creature A WINS!");
+        } else if battle.creature_a_hp == 0 {
+            battle.is_battle_over = true;
+            battle.winner = Some(1);
+            msg!("Creature B WINS!");
+        }
+
+        battle.current_turn += 1;
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -51,6 +99,17 @@ pub struct InitializeBattle<'info> {
     #[account(mut)]
     pub authourity: Signer<'info>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteTurn<'info> {
+    #[account(
+        mut,
+        seeds = [b"battle", battle_state.battle_id.to_le_bytes().as_ref()],
+        bump  = battle_state.bump,
+    )]
+    pub battle_state: Account<'info, BattleState>,
+    pub executer: Signer<'info>,
 }
 
 #[account]
@@ -77,4 +136,10 @@ pub struct BattleState {
 
 impl BattleState {
     pub const LEN: usize = 8 + 8 + 32 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 1 + 8 + 1 + 100;
+}
+
+#[error_code]
+pub enum GameError {
+    #[msg("Battle is already over")]
+    BattleAlreadyOver,
 }
