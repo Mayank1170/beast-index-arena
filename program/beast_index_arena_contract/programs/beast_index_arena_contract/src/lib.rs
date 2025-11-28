@@ -12,6 +12,7 @@ pub mod beast_index_arena_contract {
         hp: u16,
         atk: u16,
         def: u16,
+        spd: u16,
     ) -> Result<()> {
         let battle = &mut ctx.accounts.battle_state;
         battle.battle_id = battle_id;
@@ -21,6 +22,7 @@ pub mod beast_index_arena_contract {
         battle.creature_atk = [atk, atk, atk, atk];
         battle.creature_def = [def, def, def, def];
         battle.creature_max_hp = [hp, hp, hp, hp];
+        battle.creature_spd = [spd, spd, spd, spd];
         battle.is_alive = [true, true, true, true];
 
         battle.is_battle_over = false;
@@ -37,7 +39,15 @@ pub mod beast_index_arena_contract {
 
         require!(!battle.is_battle_over, GameError::BattleAlreadyOver);
 
-        for attacker_idx in 0..4 {
+        let mut creature_order: Vec<(usize, u16)> = Vec::new();
+        for i in 0..4 {
+            if battle.is_alive[i] {
+                creature_order.push((i, battle.creature_spd[i]));
+            }
+        }
+        creature_order.sort_by(|a, b| b.1.cmp(&a.1));
+
+        for (attacker_idx, _speed) in creature_order {
             if !battle.is_alive[attacker_idx] {
                 continue;
             }
@@ -127,6 +137,7 @@ pub struct BattleState {
     pub creature_max_hp: [u16; 4],
     pub creature_atk: [u16; 4],
     pub creature_def: [u16; 4],
+    pub creature_spd: [u16; 4],
     pub is_alive: [bool; 4],
 
     pub is_battle_over: bool,
@@ -137,8 +148,20 @@ pub struct BattleState {
 }
 
 impl BattleState {
-    pub const LEN: usize =
-        8 + 8 + 32 + (2 * 4) + (2 * 4) + (2 * 4) + (2 * 4) + (1 * 4) + 1 + 2 + 8 + 1 + 100;
+    pub const LEN: usize = 8
+        + 8
+        + 32
+        + (2 * 4)
+        + (2 * 4)
+        + (2 * 4)
+        + (2 * 4)
+        + (2 * 4)
+        + (1 * 4)
+        + 1
+        + 2
+        + 8
+        + 1
+        + 100;
 }
 
 fn get_random_seed(clock: &Clock, salt: u64) -> u64 {
