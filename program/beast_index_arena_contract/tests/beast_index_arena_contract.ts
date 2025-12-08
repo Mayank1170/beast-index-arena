@@ -8,11 +8,21 @@ describe("Beast Index Arena - Complete Test Suite", () => {
   anchor.setProvider(provider);
   const program = anchor.workspace.BeastIndexArenaContract as Program<BeastIndexArenaContract>;
 
+  // Use battle ID 100 for production frontend (with proper 10 SOL liquidity)
+  const sharedBattleId = new anchor.BN(100);
+
+  // Generate unique battle IDs for other tests
+  const testRunId = Date.now();
+  let battleCounter = 0;
+  const getUniqueBattleId = () => {
+    return new anchor.BN(testRunId + battleCounter++);
+  };
+
   // ============================================================================
   // TEST 1: Initialize Battle
   // ============================================================================
   it("✅ Initialize battle with 4 creatures", async () => {
-    const battleId = new anchor.BN(1);
+    const battleId = sharedBattleId;
 
     const [battleState] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("battle"), battleId.toArrayLike(Buffer, "le", 8)],
@@ -51,7 +61,7 @@ describe("Beast Index Arena - Complete Test Suite", () => {
     console.log("  Max Duration:", battle.maxDuration.toNumber(), "seconds");
 
     // Verify
-    if (battle.battleId.toNumber() !== 1) throw new Error("❌ Battle ID wrong");
+    if (battle.battleId.toNumber() !== battleId.toNumber()) throw new Error("❌ Battle ID wrong");
     if (battle.creatureHp[0] !== 100) throw new Error("❌ HP wrong");
     if (battle.creatureSpd[0] !== 30) throw new Error("❌ SPD wrong");
 
@@ -62,7 +72,7 @@ describe("Beast Index Arena - Complete Test Suite", () => {
   // TEST 2: Initialize Market
   // ============================================================================
   it("✅ Initialize AMM market for betting", async () => {
-    const battleId = new anchor.BN(1);
+    const battleId = sharedBattleId;
 
     const [marketState] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("market"), battleId.toArrayLike(Buffer, "le", 8)],
@@ -71,7 +81,7 @@ describe("Beast Index Arena - Complete Test Suite", () => {
 
     console.log("\n💰 Market Account:", marketState.toBase58());
 
-    const initialLiquidity = new anchor.BN(1000000); // Initial virtual liquidity
+    const initialLiquidity = new anchor.BN(10 * LAMPORTS_PER_SOL); // 10 SOL liquidity for production
 
     const tx = await program.methods
       .initializeMarket(battleId, initialLiquidity)
@@ -104,7 +114,7 @@ describe("Beast Index Arena - Complete Test Suite", () => {
   // TEST 3: Buy Shares (AMM)
   // ============================================================================
   it("✅ Buy shares on Creature 0 (AMM pricing)", async () => {
-    const battleId = new anchor.BN(1);
+    const battleId = sharedBattleId;
 
     const [battleState] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("battle"), battleId.toArrayLike(Buffer, "le", 8)],
@@ -178,7 +188,7 @@ describe("Beast Index Arena - Complete Test Suite", () => {
   // TEST 4: Multiple Buys (Dynamic Pricing)
   // ============================================================================
   it("✅ Multiple players bet - prices increase", async () => {
-    const battleId = new anchor.BN(1);
+    const battleId = sharedBattleId;
 
     const [marketState] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("market"), battleId.toArrayLike(Buffer, "le", 8)],
@@ -269,7 +279,7 @@ describe("Beast Index Arena - Complete Test Suite", () => {
   // TEST 5: Sell Shares
   // ============================================================================
   it("✅ Sell shares before battle ends", async () => {
-    const battleId = new anchor.BN(1);
+    const battleId = sharedBattleId;
 
     const [battleState] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("battle"), battleId.toArrayLike(Buffer, "le", 8)],
@@ -336,7 +346,7 @@ describe("Beast Index Arena - Complete Test Suite", () => {
   // TEST 6: Execute Turn
   // ============================================================================
   it("✅ Execute turn with abilities and SPD order", async () => {
-    const battleId = new anchor.BN(1);
+    const battleId = sharedBattleId;
 
     const [battleState] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("battle"), battleId.toArrayLike(Buffer, "le", 8)],
@@ -373,7 +383,7 @@ describe("Beast Index Arena - Complete Test Suite", () => {
   // TEST 7: Complete Battle & Claim Winnings
   // ============================================================================
   it("✅ Run battle to completion and claim winnings", async () => {
-    const battleId = new anchor.BN(3); // New battle
+    const battleId = getUniqueBattleId(); // New battle
 
     // Initialize battle
     const [battleState] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -510,7 +520,7 @@ describe("Beast Index Arena - Complete Test Suite", () => {
   // TEST 8: Error Cases
   // ============================================================================
   it("✅ Error handling works", async () => {
-    const battleId = new anchor.BN(4);
+    const battleId = getUniqueBattleId();
 
     // Initialize battle
     const [battleState] = anchor.web3.PublicKey.findProgramAddressSync(

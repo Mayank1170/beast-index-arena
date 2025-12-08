@@ -1,0 +1,24 @@
+export const BOT_CONFIG = {
+    TURN_INTERVAL_SECONDS: 10,
+    DELAY_BETWEEN_BATTLES_SECONDS: 60,
+
+    CREATURE_HP: 100,
+    CREATURE_ATK: 50,
+    CREATURE_DEF: 20,
+    CREATURE_SPD: 30,
+
+    TURN_INTERVAL: 10,
+    MAX_DURATION: 86400,
+
+
+    INITIAL_LIQUIDITY_SOL: 10,
+
+
+    RPC_ENDPOINT: "https://api.devnet.solana.com",
+    COMMITMENT: "confirmed" as const,
+
+
+    PROGRAM_ID: "28VkZmQABZWqq3gmossB41hYF9846gG2TWMyk4u6jTd4",
+
+    STARTING_BATTLE_ID: 103,
+};
