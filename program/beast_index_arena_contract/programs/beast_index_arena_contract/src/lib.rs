@@ -97,7 +97,7 @@ pub mod beast_index_arena_contract {
             if !battle.is_alive[attacker_idx] {
                 continue;
             }
-            let random_seed = get_random_seed(clock, attacker_idx as u64);
+            let random_seed = get_random_seed(clock, battle.current_turn.wrapping_mul(10).wrapping_add(attacker_idx as u64));
             let target_idx = match pick_random_target(attacker_idx, &battle.is_alive, random_seed) {
                 Some(idx) => idx,
                 None => {
@@ -113,7 +113,7 @@ pub mod beast_index_arena_contract {
             // let damage = battle.creature_atk[attacker_idx]
             //     .saturating_sub(battle.creature_def[target_idx])
             //     .max(1);
-            let ability_seed = get_random_seed(clock, (attacker_idx + 100) as u64);
+            let ability_seed = get_random_seed(clock, battle.current_turn.wrapping_mul(100).wrapping_add(attacker_idx as u64));
             let ability = pick_random_ability(ability_seed);
 
             let damage = calculate_damage(
@@ -190,44 +190,50 @@ pub mod beast_index_arena_contract {
             current_shares,
             amount,
             market.k_constant,
-        )?;    
+        )?;
 
-    let cpi_context = CpiContext::new(
-        ctx.accounts.system_program.to_account_info(),
-        anchor_lang::system_program::Transfer{
-            from: ctx.accounts.user.to_account_info(),
-            to: market.to_account_info(),
-        },
-    );
-    anchor_lang::system_program::transfer(cpi_context, amount)?;    
-    match creature_index {
-        0 => {
-            market.creature_0_pool += amount;
-            market.creature_0_shares -= shares_bought;  
-        },
-        1 => {
-            market.creature_1_pool += amount;
-            market.creature_1_shares -= shares_bought;
-        },
-        2 => {
-            market.creature_2_pool += amount;
-            market.creature_2_shares -= shares_bought;
-        },
-        3 => {
-            market.creature_3_pool += amount;
-            market.creature_3_shares -= shares_bought;
-        },
-        _ => return Err(GameError::InvalidCreatureIndex.into()),
-    }
-    
-    market.total_pool += amount;
-    
-    position.user = ctx.accounts.user.key();
-    position.battle_id = battle.battle_id;
-    position.creature_index = creature_index;
-    position.amount = shares_bought; 
-    position.claimed = false;
-    position.bump = ctx.bumps.user_position;
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            anchor_lang::system_program::Transfer{
+                from: ctx.accounts.user.to_account_info(),
+                to: market.to_account_info(),
+            },
+        );
+        anchor_lang::system_program::transfer(cpi_context, amount)?;
+        match creature_index {
+            0 => {
+                market.creature_0_pool += amount;
+                market.creature_0_shares -= shares_bought;
+            },
+            1 => {
+                market.creature_1_pool += amount;
+                market.creature_1_shares -= shares_bought;
+            },
+            2 => {
+                market.creature_2_pool += amount;
+                market.creature_2_shares -= shares_bought;
+            },
+            3 => {
+                market.creature_3_pool += amount;
+                market.creature_3_shares -= shares_bought;
+            },
+            _ => return Err(GameError::InvalidCreatureIndex.into()),
+        }
+
+        market.total_pool += amount;
+
+        if position.user == Pubkey::default() {
+            position.user = ctx.accounts.user.key();
+            position.battle_id = battle.battle_id;
+            position.creature_index = creature_index;
+            position.amount = shares_bought;
+            position.claimed = false;
+            position.bump = ctx.bumps.user_position;
+        } else {
+            position.amount = position.amount
+                .checked_add(shares_bought)
+                .ok_or(GameError::CalculationOverflow)?;
+        }
     
     msg!(
         "{} bought {} shares of Creature {} for {} lamports",
@@ -254,8 +260,8 @@ pub mod beast_index_arena_contract {
         },
     )?;
     msg!("Current price per share: {}", current_price);
-    
-        Ok(())
+
+    Ok(())
     }
 
     pub fn sell_shares(
@@ -288,30 +294,9 @@ pub mod beast_index_arena_contract {
             shares_to_sell,
             market.k_constant,
         )?;
-        
-        let battle_id_bytes = battle.battle_id.to_le_bytes();
-        let seeds = &[
-            b"market",
-            battle_id_bytes.as_ref(),
-            &[market.bump],
-        ];
-        let signer = &[&seeds[..]];
-        
-        let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
-            &market.key(),
-            &ctx.accounts.user.key(),
-            sol_returned,
-        );
-        
-        anchor_lang::solana_program::program::invoke_signed(
-            &transfer_ix,
-            &[
-                market.to_account_info(),
-                ctx.accounts.user.to_account_info(),
-                ctx.accounts.system_program.to_account_info(),
-            ],
-            signer,
-        )?;
+
+        **market.to_account_info().try_borrow_mut_lamports()? -= sol_returned;
+        **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += sol_returned;
         
         match creature_index {
             0 => {
@@ -379,30 +364,10 @@ pub mod beast_index_arena_contract {
         .ok_or(GameError::DivisionByZero)?
         as u64;
 
-         let battle_id_bytes = battle.battle_id.to_le_bytes();
-    let seeds = &[
-        b"market",
-        battle_id_bytes.as_ref(),
-        &[market.bump],
-    ];
-    let signer = &[&seeds[..]];
-    
-    let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
-        &market.key(),
-        &user.key(),
-        payout,
-    );
-    
-    anchor_lang::solana_program::program::invoke_signed(
-        &transfer_ix,
-        &[
-            market.to_account_info(),
-            user.to_account_info(),
-            ctx.accounts.system_program.to_account_info(),
-        ],
-        signer,
-    )?;
-    position.claimed = true;
+        **market.to_account_info().try_borrow_mut_lamports()? -= payout;
+        **user.to_account_info().try_borrow_mut_lamports()? += payout;
+
+        position.claimed = true;
         Ok(())
     }
 
@@ -478,7 +443,7 @@ pub struct PlaceBet<'info> {
     )]
     pub battle_state: Account<'info, BattleState>,
     #[account(
-        init,
+        init_if_needed,
         payer = user,
         space = UserPosition::LEN,
         seeds = [
@@ -692,7 +657,12 @@ fn get_random_seed(clock: &Clock, salt: u64) -> u64 {
     let slot = clock.slot;
     let timestamp = clock.unix_timestamp as u64;
 
-    slot.wrapping_mul(timestamp).wrapping_add(salt)
+    let mixed1 = slot.wrapping_mul(0x9e3779b97f4a7c15); 
+    let mixed2 = timestamp.wrapping_mul(0x517cc1b727220a95); 
+    let mixed3 = salt.wrapping_mul(0x85ebca77c2b2ae63);
+
+    let result = mixed1 ^ mixed2 ^ mixed3;
+    result.wrapping_mul(result >> 32).wrapping_add(salt)
 }
 
 fn pick_random_target(
