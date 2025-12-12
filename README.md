@@ -38,7 +38,6 @@ This repository is organized as a **Monorepo**:
 | Component | Path | Description |
 | :--- | :--- | :--- |
 | **Program** | `/program` | **Rust/Anchor** Smart Contracts handling state, RNG, and betting logic. |
-| **Client** | `/app` | **Next.js** frontend for visualization and wallet interaction. |
 | **Crank** | `/scripts` | **Node.js** automation script that drives the battle forward. |
 
 ---
