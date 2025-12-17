@@ -35,7 +35,7 @@ All game logic happens on the blockchain - the bot simply triggers the transacti
   - Damage calculation is deterministic (e.g., Damage = max(1, ATK - DEF))
 - **Elimination**: When HP hits 0, the creature is removed. The last one standing wins.
 
-### The Prediction Market (Parimutuel)
+### The Prediction Market
 
 Players speculate on the outcome by purchasing shares of a specific creature.
 
